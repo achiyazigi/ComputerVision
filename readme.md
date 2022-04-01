@@ -18,17 +18,16 @@
 <br>
 
 <table>
-    <th>
     <tr>
-    <td></td>
-        <td>
-        testImg1.jpg
-        </td>
-        <td>
-        testImg2.jpg
-        </td>
-        </tr>
-    </th>
+    <td>
+    </td>
+    <td>
+    testImg1.jpg
+    </td>
+    <td>
+    testImg2.jpg
+    </td>
+    </tr>
     <tb>
     <tr><td>original</td><td><img src="testImg1.jpg"></td><td><img src="testImg2.jpg"></td></tr>
     <tr><td>equalized</td><td><img src="histogram_equalized.png"><img src="equalization.png"/></td><td><img src="histogram_equalized2.png"><img src="equalization2.png"></td></tr>
