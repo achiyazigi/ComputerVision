@@ -105,7 +105,10 @@ def hsitogramEqualize(imgOrig: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.n
     hist = np.histogram(img, bins=256, range=(0, 255))[0]
     cumsum = np.cumsum(hist)
     pixle_count = img.size
+
+    # create look up table
     lut = np.array([math.ceil((s/pixle_count)*255) for s in cumsum])
+    # update image with the lut
     eq_img = np.array([[lut[p] for p in row] for row in img])
     eq_hist = np.histogram(eq_img, bins=256, range=(0, 255))[0]
     eq_img = eq_img.astype(np.float64)/255
@@ -126,6 +129,7 @@ def quantizeImage(imOrig: np.ndarray, nQuant: int, nIter: int) -> Tuple[List[np.
     """
     grayscale = len(imOrig.shape) < 3
 
+    # dont want to touch the original:
     img_copy = np.array(imOrig)
     img = img_copy
     if not grayscale:
@@ -134,32 +138,39 @@ def quantizeImage(imOrig: np.ndarray, nQuant: int, nIter: int) -> Tuple[List[np.
     img = (img * 255).astype(np.uint8)
     q_images = []
     errors = []
+    # initial split to equal slices
     z = np.linspace(0, 255, num=nQuant + 1, dtype=np.uint8)
+
     hist, bins = np.histogram(img, bins=255)
+
+    # statring gradient descent
     for i in range(nIter):
+        # intensities (weights)
         w = [hist[z[j]:z[j+1]] for j in range(nQuant)]
+
+        # the mean color in each slice
         q = np.array([np.average(range(z[j], z[j+1]), weights=w[j] if sum(w[j])
                      > 0 else None) for j in range(nQuant)], dtype=np.float128)
         q_image = np.array(img)
+        # update colors:
         for j in range(nQuant):
             condition = (z[j] <= img) & (img <= z[j+1])
             if math.isnan(q[j]):
                 q[j] = 0
             q_image[condition] = int(q[j])
 
+        # convert back to original form
         q_image = q_image.astype(float)/255
         if not grayscale:
             img_copy[:, :, 0] = q_image
             q_image = transformYIQ2RGB(img_copy)
 
         q_images.append(q_image)
+        # loss
         error = np.sqrt(
             np.sum(np.power(imOrig - q_image, 2)))/imOrig.size
         errors.append(error)
+        # augment z
         z = [0]+[int((q[j]+q[j+1])/2) for j in range(nQuant-1)]+[255]
-    # if grayscale:
-    #     plt.imshow(q_image, cmap='gray')
-    # else:
-    #     plt.imshow(q_image)
-    # plt.show()
+
     return q_images, errors

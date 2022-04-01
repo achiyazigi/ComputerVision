@@ -23,10 +23,11 @@ def gammaDisplay(img_path: str, rep: int):
     title_window = 'Gamma Correction'
     cv2.namedWindow(title_window)
     img = imReadAndConvert(img_path, rep)
-    # if(rep == 1):
 
     def on_trackbar(gamma):
+        # correct image with normalized gamma ([0,200]=>[0,2])
         img2 = np.power(img, gamma/100)
+        # convert to BGR [0,255]
         to_show = cv2.cvtColor(
             (img2 * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
         cv2.imshow(title_window, to_show)
