@@ -80,7 +80,7 @@ def conv2D(in_image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
 
     filtered = [[np.sum(in_image[i:i + h, j:j+w] * kernel) for j in range(
         in_image.shape[1] - wm)] for i in range(in_image.shape[0] - hm)]
-    return np.array(filtered)
+    return np.array(filtered).astype(np.float64)
 
 
 def convDerivative(in_image: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -92,8 +92,9 @@ def convDerivative(in_image: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     kernel = np.array([[1, 0, -1]])
     image_grad_x = conv2D(in_image, kernel)
     image_grad_y = conv2D(in_image, kernel.T)
-    mag = np.sqrt(np.power(image_grad_x, 2) + np.power(image_grad_y, 2))
-    direction = np.tanh(image_grad_y/image_grad_x)
+    mag = np.sqrt(np.power(image_grad_x, 2) +
+                  np.power(image_grad_y, 2)).astype(np.float64)
+    direction = np.arctan2(image_grad_y, image_grad_x).astype(np.float64)
     return direction, mag
 
 
@@ -104,8 +105,20 @@ def blurImage1(in_image: np.ndarray, k_size: int) -> np.ndarray:
     :param k_size: Kernel size
     :return: The Blurred image
     """
+    def conv_with_itteration(sig, kernel, itterations) -> np.ndarray:
+        for _ in range(itterations):
+            sig = conv1D(sig, kernel)
+        return sig.astype(np.float128)
+    temp_kernel = np.array([1, 1])
+    itterations = max(0, k_size - temp_kernel.size)
+    coef_kernel = conv_with_itteration(temp_kernel, temp_kernel, itterations)
+    coef_kernel /= coef_kernel.sum()
+    coef_kernel = np.atleast_2d(coef_kernel)
+    print(coef_kernel.T)
 
-    return
+    kernel = coef_kernel.T @ coef_kernel
+
+    return conv2D(in_image, kernel)
 
 
 def blurImage2(in_image: np.ndarray, k_size: int) -> np.ndarray:
@@ -115,8 +128,13 @@ def blurImage2(in_image: np.ndarray, k_size: int) -> np.ndarray:
     :param k_size: Kernel size
     :return: The Blurred image
     """
+    kernel = cv2.getGaussianKernel(k_size, -1)
+    print(kernel)
+    print()
+    kernel = kernel @ kernel.T
 
-    return
+    return cv2.filter2D(in_image, -1, kernel, borderType=cv2.BORDER_REPLICATE)
+    # return cv2.GaussianBlur(in_image, (k_size, k_size), cv2.BORDER_REPLICATE)
 
 
 def edgeDetectionZeroCrossingSimple(img: np.ndarray) -> np.ndarray:
@@ -125,7 +143,6 @@ def edgeDetectionZeroCrossingSimple(img: np.ndarray) -> np.ndarray:
     :param img: Input image
     :return: opencv solution, my implementation
     """
-
     return
 
 
@@ -136,7 +153,26 @@ def edgeDetectionZeroCrossingLOG(img: np.ndarray) -> np.ndarray:
     :return: opencv solution, my implementation
     """
 
-    return
+    img = blurImage2(img, 11)
+    lap_ker = np.array([[0, 1, 0],
+                        [1, -4, 1],
+                        [0, 1, 0]])
+    img = conv2D(img, lap_ker)
+    minus = img < 0
+    plus = img >= 0
+    edges = np.zeros_like(img)
+    for i in range(1, img.shape[0]):
+        for j in range(1, img.shape[1]):
+            if minus[i, j-1] and plus[i, j]:
+                edges[i, j] = 1
+            elif plus[i, j-1] and minus[i, j]:
+                edges[i, j] = 1
+            if (minus[i - 1, j] and plus[i, j]):
+                edges[i, j] = 1
+            elif (plus[i - 1, j] and minus[i, j]):
+                edges[i, j] = 1
+
+    return edges
 
 
 def houghCircle(img: np.ndarray, min_radius: int, max_radius: int) -> list:
@@ -149,8 +185,28 @@ def houghCircle(img: np.ndarray, min_radius: int, max_radius: int) -> list:
     :return: A list containing the detected circles,
                 [(x,y,radius),(x,y,radius),...]
     """
-
-    return
+    SIZE_THRESH_RATIO = 8000
+    edges = cv2.Canny((img*255).astype(np.uint8), 250, 500) / 255
+    edges_points_arrays = np.where(edges == 1)
+    edges_points = list(zip(*edges_points_arrays))
+    votes = {}
+    # for every point
+    for y, x in edges_points:
+        for r in range(min_radius, max_radius):
+            # for every theta
+            for theta in range(181):
+                a = int(x + r * np.cos(np.deg2rad(theta)))
+                b = int(y + r * np.sin(np.deg2rad(theta)))
+                if a < img.shape[0] and b < img.shape[1]:
+                    if (a, b, r) in votes:
+                        votes[(a, b, r)] += 1
+                    else:
+                        votes[(a, b, r)] = 1
+    threshold = img.size / \
+        SIZE_THRESH_RATIO if img.size > SIZE_THRESH_RATIO else max(
+            votes.values()) - 1
+    best = list(filter(lambda k: votes[k] > threshold, list(votes.keys())))
+    return best
 
 
 def bilateral_filter_implement(in_image: np.ndarray, k_size: int, sigma_color: float, sigma_space: float) -> tuple[

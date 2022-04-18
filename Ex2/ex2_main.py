@@ -18,6 +18,7 @@ def blurDemo():
     b2 = blurImage2(img, k_size)
 
     print("Blurring MSE:{:.6f}".format(np.sqrt(np.power(b1 - b2, 2).mean())))
+
     f, ax = plt.subplots(1, 3)
     ax[0].imshow(b1)
     ax[1].imshow(b1 - b2)
@@ -25,34 +26,47 @@ def blurDemo():
     plt.show()
 
 
-def edgeDemo():
-    img = cv2.imread('input/boxMan.jpg', cv2.IMREAD_GRAYSCALE) / 255
+def edgeDemoSimple():
     img = cv2.imread('input/codeMonkey.jpg', cv2.IMREAD_GRAYSCALE) / 255
     img = cv2.resize(img, (0, 0), fx=.25, fy=.25)
+    edge_matrix = edgeDetectionZeroCrossingSimple(img)
 
-    ocv = my = edgeDetectionZeroCrossingSimple(img)
-    ocv = my = edgeDetectionZeroCrossingLOG(img)
-
-    f, ax = plt.subplots(1, 3)
-    ax[0].set_title("OPENCV")
-    ax[1].set_title("Mine")
-    ax[2].set_title("Diff")
-    ax[0].imshow(ocv)
-    ax[1].imshow(my)
-    ax[2].imshow(my - ocv)
+    f, ax = plt.subplots(1, 2)
+    ax[0].set_title("Ori")
+    ax[1].set_title("Edge")
+    ax[0].imshow(img)
+    ax[1].imshow(edge_matrix)
     plt.show()
+
+
+def edgeDemoLOG():
+    img = cv2.imread('input/boxMan.jpg', cv2.IMREAD_GRAYSCALE) / 255
+    img = cv2.resize(img, (0, 0), fx=.25, fy=.25)
+    edge_matrix = edgeDetectionZeroCrossingLOG(img)
+
+    f, ax = plt.subplots(1, 2)
+    ax[0].set_title("Ori")
+    ax[1].set_title("Edge")
+    ax[0].imshow(img)
+    ax[1].imshow(edge_matrix)
+    plt.show()
+
+
+def edgeDemo():
+    edgeDemoSimple()
+    edgeDemoLOG()
 
 
 def houghDemo():
     img = cv2.imread('input/pool_balls.jpg', cv2.IMREAD_GRAYSCALE) / 255
     min_r, max_r = 10, 20
 
-    img = cv2.imread('input/coins.jpg', cv2.IMREAD_GRAYSCALE) / 255
-    min_r, max_r = 50, 100
+    img = cv2.imread('large_circle_achiyazigi.jpg', cv2.IMREAD_GRAYSCALE) / 255
+    min_r, max_r = 25, 100
 
     st = time.time()
     cv2_cir = cv2.HoughCircles((img * 255).astype(np.uint8), cv2.HOUGH_GRADIENT, 1, minDist=30, param1=500,
-                               param2=80,
+                               param2=1,
                                minRadius=min_r, maxRadius=max_r)
     print("Hough Time[CV]: {:.3f} sec".format(time.time() - st))
 
@@ -63,12 +77,10 @@ def houghDemo():
     fig, ax = plt.subplots()
     ax.imshow(img, cmap='gray')
     for c in hough_rings:
-        circle1 = plt.Circle((c[0], c[1]), c[2],
-                             color='r', fill=False, linewidth=3)
+        circle1 = plt.Circle((c[0], c[1]), c[2], color='r', fill=False, linewidth=3)
         ax.add_artist(circle1)
     for c in cv2_cir[0]:
-        circle1 = plt.Circle((c[0], c[1]), c[2],
-                             color='g', fill=False, linewidth=2)
+        circle1 = plt.Circle((c[0], c[1]), c[2], color='g', fill=False, linewidth=2)
         ax.add_artist(circle1)
     plt.show()
 
@@ -81,12 +93,10 @@ def conv1Demo():
     kernel = np.array([1, 1])
 
     sig_conv = conv1D(signal, kernel).astype(int)
-    # their_conv = cv2.filter2D(
-    #     signal, -1, kernel, borderType=cv2.BORDER_REPLICATE)
-    print(f"Signal:\t{signal}")
+
+    print("Signal:\t{}".format(signal))
     print("Numpy:\t{}".format(np.convolve(signal, kernel, 'full')))
     print("Mine:\t{}".format(sig_conv))
-    # print("Theirs:\t{}".format(their_conv))
 
 
 def conv2Demo():
@@ -94,15 +104,12 @@ def conv2Demo():
     kernel = np.ones((5, 5))
     kernel = kernel / kernel.sum()
     c_img = conv2D(img, kernel) / 255
+    cv_img = cv2.filter2D(img, -1, kernel, borderType=cv2.BORDER_REPLICATE) / 255
 
-    cv_img = cv2.filter2D(
-        img, -1, kernel, borderType=cv2.BORDER_REPLICATE) / 255
     print("MSE: {}".format(255 * MSE(c_img, cv_img)))
-    print("Max Error: {}".format(
-        np.abs(c_img - cv_img).max() * 255
-    ))
+    print("Max Error: {}".format(np.abs(c_img - cv_img).max() * 255))
+
     f, ax = plt.subplots(1, 3)
-    plt.gray()
     ax[0].imshow(c_img)
     ax[1].imshow(cv_img - c_img)
     ax[2].imshow(cv_img)
@@ -139,18 +146,17 @@ def biliteralFilterDemo():
     img = cv2.imread('input/boxMan.jpg', cv2.IMREAD_GRAYSCALE)
     cv2.imwrite("original_image_grayscale.jpg", img)
 
-    filtered_image_CV, filtered_image_my = bilateral_filter_implement(
-        img, 9, 8.0, 16.0)
+    filtered_image_CV, filtered_image_my = bilateral_filter_implement(img, 9, 8.0, 16.0)
     cv2.imwrite("filtered_image_OpenCV.jpg", filtered_image_CV)
     cv2.imwrite("filtered_image_my.jpg", filtered_image_my)
 
 
 def main():
-    conv1Demo()
-    conv2Demo()
-    derivDemo()
-    blurDemo()
-    edgeDemo()
+    # conv1Demo()
+    # conv2Demo()
+    # derivDemo()
+    # blurDemo()
+    # edgeDemo()
     houghDemo()
     biliteralFilterDemo()
 
