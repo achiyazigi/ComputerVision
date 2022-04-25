@@ -1,5 +1,4 @@
 import math
-from matplotlib import pyplot as plt
 import numpy as np
 import cv2
 
@@ -202,10 +201,7 @@ def houghCircle(img: np.ndarray, min_radius: int, max_radius: int) -> list:
                 [(x,y,radius),(x,y,radius),...]
     """
     SIZE_THRESH_RATIO = 0.47
-    plt.imshow(img, cmap='gray')
     edges = cv2.Canny((img*255).astype(np.uint8), 100, 200) / 255
-    plt.imshow(edges * 255, cmap='gray')
-    plt.show()
     edges_points_arrays = np.where(edges > 0)
     edges_points = list(zip(*edges_points_arrays))
     votes = {}
