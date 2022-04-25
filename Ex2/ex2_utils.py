@@ -1,4 +1,6 @@
 import math
+from click import progressbar
+from matplotlib import pyplot as plt
 import numpy as np
 import cv2
 from alive_progress import alive_bar
@@ -84,7 +86,7 @@ def conv2D(in_image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     return np.array(filtered).astype(np.float64)
 
 
-def convDerivative(in_image: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def convDerivative(in_image: np.ndarray):
     """
     Calculate gradient of an image
     :param in_image: Grayscale iamge
@@ -115,7 +117,6 @@ def blurImage1(in_image: np.ndarray, k_size: int) -> np.ndarray:
     coef_kernel = conv_with_itteration(temp_kernel, temp_kernel, itterations)
     coef_kernel /= coef_kernel.sum()
     coef_kernel = np.atleast_2d(coef_kernel)
-    print(coef_kernel.T)
 
     kernel = coef_kernel.T @ coef_kernel
 
@@ -130,35 +131,17 @@ def blurImage2(in_image: np.ndarray, k_size: int) -> np.ndarray:
     :return: The Blurred image
     """
     kernel = cv2.getGaussianKernel(k_size, -1)
-    print(kernel)
-    print()
     kernel = kernel @ kernel.T
 
     return cv2.filter2D(in_image, -1, kernel, borderType=cv2.BORDER_REPLICATE)
     # return cv2.GaussianBlur(in_image, (k_size, k_size), cv2.BORDER_REPLICATE)
 
 
-def edgeDetectionZeroCrossingSimple(img: np.ndarray) -> np.ndarray:
+def zeroCrossing(img: np.ndarray) -> np.ndarray:
     """
-    Detecting edges using "ZeroCrossing" method
-    :param img: Input image
-    :return: opencv solution, my implementation
+    
+    :return: zero crossed binary image
     """
-    return
-
-
-def edgeDetectionZeroCrossingLOG(img: np.ndarray) -> np.ndarray:
-    """
-    Detecting edges usint "ZeroCrossingLOG" method
-    :param img: Input image
-    :return: opencv solution, my implementation
-    """
-
-    img = blurImage2(img, 11)
-    lap_ker = np.array([[0, 1, 0],
-                        [1, -4, 1],
-                        [0, 1, 0]])
-    img = conv2D(img, lap_ker)
     minus = img < 0
     plus = img >= 0
     edges = np.zeros_like(img)
@@ -174,7 +157,35 @@ def edgeDetectionZeroCrossingLOG(img: np.ndarray) -> np.ndarray:
                 edges[i, j] = 1
 
     return edges
+def edgeDetectionZeroCrossingSimple(img: np.ndarray) -> np.ndarray:
+    """
+    Detecting edges using "ZeroCrossing" method
+    :param img: Input image
+    :return: opencv solution, my implementation
+    """
+    img = blurImage2(img, 11)
+    simple_ker = np.array([[-1, 0, 1],
+                            [0, 0, 0],
+                            [1, 0, -1]])
+    img = conv2D(img, simple_ker)
+    edges = zeroCrossing(img)
+    return edges
 
+def edgeDetectionZeroCrossingLOG(img: np.ndarray) -> np.ndarray:
+    """
+    Detecting edges usint "ZeroCrossingLOG" method
+    :param img: Input image
+    :return: opencv solution, my implementation
+    """
+
+    img = blurImage2(img, 11)
+    lap_ker = np.array([[0, 1, 0],
+                        [1, -4, 1],
+                        [0, 1, 0]])
+    img = conv2D(img, lap_ker)
+   
+    edges = zeroCrossing(img)
+    return edges
 
 def houghCircle(img: np.ndarray, min_radius: int, max_radius: int) -> list:
     """
@@ -186,37 +197,47 @@ def houghCircle(img: np.ndarray, min_radius: int, max_radius: int) -> list:
     :return: A list containing the detected circles,
                 [(x,y,radius),(x,y,radius),...]
     """
-    img = cv2.GaussianBlur(img, (9, 9), 0)
-    SIZE_THRESH_RATIO = 8000
-    edges = cv2.Canny((img*255).astype(np.uint8), 250, 500) / 255
-    edges_points_arrays = np.where(edges == 1)
+    SIZE_THRESH_RATIO = 0.47
+    plt.imshow(img , cmap='gray')
+    edges = cv2.Canny((img*255).astype(np.uint8), 100, 200) / 255
+    plt.imshow(edges * 255, cmap='gray')
+    plt.show()
+    edges_points_arrays = np.where(edges > 0)
     edges_points = list(zip(*edges_points_arrays))
     votes = {}
-    voiting_unit = 1/len(edges_points)
+    steps = 100
     # for every point
-    with alive_bar(len(edges_points * (max_radius - min_radius) * 181)) as bar:
+    with alive_bar(len(edges_points * (max_radius - min_radius) * steps)) as bar:
         for y, x in edges_points:
             for r in range(min_radius, max_radius):
                 # for every theta
-                for theta in range(181):
+                for step in range(steps):
+                    theta = 360 * step/steps
                     a = int(x + r * np.cos(np.deg2rad(theta)))
                     b = int(y + r * np.sin(np.deg2rad(theta)))
                     if a < img.shape[0] and b < img.shape[1]:
                         if (a, b, r) in votes:
-                            votes[(a, b, r)] += voiting_unit
+                            votes[(a, b, r)] += 1
                         else:
-                            votes[(a, b, r)] = voiting_unit
+                            votes[(a, b, r)] = 1
                     bar()
-    threshold = img.size / \
-        SIZE_THRESH_RATIO if img.size > SIZE_THRESH_RATIO else max(
-            votes.values()) - 1
-    threshold = 0.17
-    best = list(filter(lambda k: votes[k] > threshold, list(votes.keys())))
-    return best
+    max_centers = []
+    filtered_centers = list(
+        filter(lambda k: votes[k] > steps * SIZE_THRESH_RATIO, votes))
+    with alive_bar(0) as bar:
+        sorted_centers = sorted(
+            filtered_centers, key=lambda k: votes[k], reverse=True)
+    with alive_bar(len(sorted_centers)) as bar:
+        for center in sorted_centers:
+            a, b, r = center
+            if all((a - a_max)**2 + (b - b_max)**2 > r_max**2 for a_max, b_max, r_max in max_centers):
+                max_centers.append(center)
+            bar()
+
+    return max_centers
 
 
-def bilateral_filter_implement(in_image: np.ndarray, k_size: int, sigma_color: float, sigma_space: float) -> tuple[
-        np.ndarray, np.ndarray]:
+def bilateral_filter_implement(in_image: np.ndarray, k_size: int, sigma_color: float, sigma_space: float):
     """
     :param in_image: input image
     :param k_size: Kernel size

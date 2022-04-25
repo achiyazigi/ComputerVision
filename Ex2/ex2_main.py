@@ -59,14 +59,14 @@ def edgeDemo():
 
 def houghDemo():
     img = cv2.imread('input/pool_balls.jpg', cv2.IMREAD_GRAYSCALE) / 255
-    min_r, max_r = 10, 20
+    min_r, max_r = 15, 20
 
-    img = cv2.imread('input/coins.jpg', cv2.IMREAD_GRAYSCALE) / 255
-    min_r, max_r = 50, 100
+    # img = cv2.imread('input/coins.jpg', cv2.IMREAD_GRAYSCALE) / 255
+    # min_r, max_r = 50, 100
 
     st = time.time()
     cv2_cir = cv2.HoughCircles((img * 255).astype(np.uint8), cv2.HOUGH_GRADIENT, 1, minDist=30, param1=500,
-                               param2=80,
+                               param2=7,
                                minRadius=min_r, maxRadius=max_r)
     print("Hough Time[CV]: {:.3f} sec".format(time.time() - st))
 
@@ -165,12 +165,12 @@ def biliteralFilterDemo():
 
 
 def main():
-    # conv1Demo()
-    # conv2Demo()
-    # derivDemo()
-    # blurDemo()
-    # edgeDemo()
-    # houghDemo()
+    conv1Demo()
+    conv2Demo()
+    derivDemo()
+    blurDemo()
+    edgeDemo()
+    houghDemo()
     biliteralFilterDemo()
 
 
