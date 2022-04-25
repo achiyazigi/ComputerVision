@@ -1,9 +1,7 @@
 import math
-from click import progressbar
 from matplotlib import pyplot as plt
 import numpy as np
 import cv2
-from alive_progress import alive_bar
 
 
 def conv1D(in_signal: np.ndarray, k_size: np.ndarray) -> np.ndarray:
@@ -77,7 +75,9 @@ def conv2D(in_image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     # At first i wasn't sure if i can use cv2.copyMakeBorder
     # so i implemented my own replicate function...
     # both ways works:
+    # option #1:
     # in_image = replicate(in_image, hm, wm)
+    # option #2:
     in_image = cv2.copyMakeBorder(
         in_image, hm_above, hm_below, wm_left, wm_right, cv2.BORDER_REPLICATE)
 
@@ -211,32 +211,27 @@ def houghCircle(img: np.ndarray, min_radius: int, max_radius: int) -> list:
     votes = {}
     steps = 100
     # for every point
-    with alive_bar(len(edges_points * (max_radius - min_radius) * steps)) as bar:
-        for y, x in edges_points:
-            for r in range(min_radius, max_radius):
-                # for every theta
-                for step in range(steps):
-                    theta = 360 * step/steps
-                    a = int(x + r * np.cos(np.deg2rad(theta)))
-                    b = int(y + r * np.sin(np.deg2rad(theta)))
-                    if a < img.shape[0] and b < img.shape[1]:
-                        if (a, b, r) in votes:
-                            votes[(a, b, r)] += 1
-                        else:
-                            votes[(a, b, r)] = 1
-                    bar()
+    for y, x in edges_points:
+        for r in range(min_radius, max_radius):
+            # for every theta
+            for step in range(steps):
+                theta = 360 * step/steps
+                a = int(x + r * np.cos(np.deg2rad(theta)))
+                b = int(y + r * np.sin(np.deg2rad(theta)))
+                if a < img.shape[0] and b < img.shape[1]:
+                    if (a, b, r) in votes:
+                        votes[(a, b, r)] += 1
+                    else:
+                        votes[(a, b, r)] = 1
     max_centers = []
     filtered_centers = list(
         filter(lambda k: votes[k] > steps * SIZE_THRESH_RATIO, votes))
-    with alive_bar(0) as bar:
-        sorted_centers = sorted(
-            filtered_centers, key=lambda k: votes[k], reverse=True)
-    with alive_bar(len(sorted_centers)) as bar:
-        for center in sorted_centers:
-            a, b, r = center
-            if all((a - a_max)**2 + (b - b_max)**2 > r_max**2 for a_max, b_max, r_max in max_centers):
-                max_centers.append(center)
-            bar()
+    sorted_centers = sorted(
+        filtered_centers, key=lambda k: votes[k], reverse=True)
+    for center in sorted_centers:
+        a, b, r = center
+        if all((a - a_max)**2 + (b - b_max)**2 > r_max**2 for a_max, b_max, r_max in max_centers):
+            max_centers.append(center)
 
     return max_centers
 
@@ -253,22 +248,20 @@ def bilateral_filter_implement(in_image: np.ndarray, k_size: int, sigma_color: f
     k2_size = math.floor(k_size/2)
     img = cv2.copyMakeBorder(in_image, k2_size, k2_size,
                              k2_size, k2_size, borderType=cv2.BORDER_REPLICATE)
-    with alive_bar(res.size) as bar:
-        for y in range(k2_size, img.shape[0]-k2_size):
-            for x in range(k2_size, img.shape[1]-k2_size):
-                pivot_v = img[y, x]
+    for y in range(k2_size, img.shape[0]-k2_size):
+        for x in range(k2_size, img.shape[1]-k2_size):
+            pivot_v = img[y, x]
 
-                neighbor_hood = img[y-k2_size: y+k2_size+1,
-                                    x-k2_size: x+k2_size+1]
-                diff = pivot_v - neighbor_hood
-                diff_gau = np.exp(-0.5 * np.power(diff/sigma_color, 2))
-                gaus = cv2.getGaussianKernel(2*k2_size+1, sigma_space)
-                gaus = gaus.dot(gaus.T)
-                combo = gaus * diff_gau
-                res[y - k2_size, x -
-                    k2_size] = (combo*neighbor_hood).sum() / combo.sum()
+            neighbor_hood = img[y-k2_size: y+k2_size+1,
+                                x-k2_size: x+k2_size+1]
+            diff = pivot_v - neighbor_hood
+            diff_gau = np.exp(-0.5 * np.power(diff/sigma_color, 2))
+            gaus = cv2.getGaussianKernel(2*k2_size+1, sigma_space)
+            gaus = gaus.dot(gaus.T)
+            combo = gaus * diff_gau
+            res[y - k2_size, x -
+                k2_size] = (combo*neighbor_hood).sum() / combo.sum()
 
-                bar()
     cv_implementation = cv2.bilateralFilter(
         in_image, k_size, sigma_color, sigma_space, borderType=cv2.BORDER_REPLICATE)
     return cv_implementation, res
