@@ -139,7 +139,7 @@ def blurImage2(in_image: np.ndarray, k_size: int) -> np.ndarray:
 
 def zeroCrossing(img: np.ndarray) -> np.ndarray:
     """
-    
+
     :return: zero crossed binary image
     """
     minus = img < 0
@@ -157,6 +157,8 @@ def zeroCrossing(img: np.ndarray) -> np.ndarray:
                 edges[i, j] = 1
 
     return edges
+
+
 def edgeDetectionZeroCrossingSimple(img: np.ndarray) -> np.ndarray:
     """
     Detecting edges using "ZeroCrossing" method
@@ -165,11 +167,12 @@ def edgeDetectionZeroCrossingSimple(img: np.ndarray) -> np.ndarray:
     """
     img = blurImage2(img, 11)
     simple_ker = np.array([[-1, 0, 1],
-                            [0, 0, 0],
-                            [1, 0, -1]])
+                           [0, 0, 0],
+                           [1, 0, -1]])
     img = conv2D(img, simple_ker)
     edges = zeroCrossing(img)
     return edges
+
 
 def edgeDetectionZeroCrossingLOG(img: np.ndarray) -> np.ndarray:
     """
@@ -183,9 +186,10 @@ def edgeDetectionZeroCrossingLOG(img: np.ndarray) -> np.ndarray:
                         [1, -4, 1],
                         [0, 1, 0]])
     img = conv2D(img, lap_ker)
-   
+
     edges = zeroCrossing(img)
     return edges
+
 
 def houghCircle(img: np.ndarray, min_radius: int, max_radius: int) -> list:
     """
@@ -198,7 +202,7 @@ def houghCircle(img: np.ndarray, min_radius: int, max_radius: int) -> list:
                 [(x,y,radius),(x,y,radius),...]
     """
     SIZE_THRESH_RATIO = 0.47
-    plt.imshow(img , cmap='gray')
+    plt.imshow(img, cmap='gray')
     edges = cv2.Canny((img*255).astype(np.uint8), 100, 200) / 255
     plt.imshow(edges * 255, cmap='gray')
     plt.show()
