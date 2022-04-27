@@ -129,7 +129,7 @@ def houghDemo():
     # OpenCV
     st = time.time()
     cv2_cir = cv2.HoughCircles((img * 255).astype(np.uint8), cv2.HOUGH_GRADIENT, 1, minDist=30, param1=500,
-                               param2=8, minRadius=min_r, maxRadius=max_r)
+                               param2=80, minRadius=min_r, maxRadius=max_r)
     print("Hough Time[CV]: {:.3f} sec".format(time.time() - st))
 
     fig, ax = plt.subplots()
