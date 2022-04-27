@@ -3,6 +3,15 @@ import numpy as np
 import cv2
 
 
+def myID() -> np.int64:
+    """
+    Return my ID (not the friend's ID I copied from)
+    :return: int
+    """
+
+    return 316071349
+
+
 def conv1D(in_signal: np.ndarray, k_size: np.ndarray) -> np.ndarray:
     """
     Convolve a 1-D array with a given kernel
@@ -10,6 +19,7 @@ def conv1D(in_signal: np.ndarray, k_size: np.ndarray) -> np.ndarray:
     :param k_size: 1-D array as a kernel
     :return: The convolved array
     """
+
     np.flip(k_size)
     # padding:
     zeros = np.zeros(shape=(k_size.size-1), dtype=in_signal.dtype)
@@ -63,6 +73,7 @@ def conv2D(in_image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     :param kernel: A kernel
     :return: The convolved image
     """
+
     h, w = kernel.shape
     hm = h-1
     wm = w-1
@@ -91,6 +102,7 @@ def convDerivative(in_image: np.ndarray):
     :param in_image: Grayscale iamge
     :return: (directions, magnitude)
     """
+
     kernel = np.array([[1, 0, -1]])
     image_grad_x = conv2D(in_image, kernel)
     image_grad_y = conv2D(in_image, kernel.T)
@@ -107,6 +119,7 @@ def blurImage1(in_image: np.ndarray, k_size: int) -> np.ndarray:
     :param k_size: Kernel size
     :return: The Blurred image
     """
+
     def conv_with_itteration(sig, kernel, itterations) -> np.ndarray:
         for _ in range(itterations):
             sig = conv1D(sig, kernel)
@@ -129,11 +142,11 @@ def blurImage2(in_image: np.ndarray, k_size: int) -> np.ndarray:
     :param k_size: Kernel size
     :return: The Blurred image
     """
+
     kernel = cv2.getGaussianKernel(k_size, -1)
     kernel = kernel @ kernel.T
 
     return cv2.filter2D(in_image, -1, kernel, borderType=cv2.BORDER_REPLICATE)
-    # return cv2.GaussianBlur(in_image, (k_size, k_size), cv2.BORDER_REPLICATE)
 
 
 def zeroCrossing(img: np.ndarray) -> np.ndarray:
@@ -162,9 +175,9 @@ def edgeDetectionZeroCrossingSimple(img: np.ndarray) -> np.ndarray:
     """
     Detecting edges using "ZeroCrossing" method
     :param img: Input image
-    :return: opencv solution, my implementation
+    :return: Edge matrix
     """
-    img = blurImage2(img, 11)
+    img = blurImage2(img, 5)
     simple_ker = np.array([[-1, 0, 1],
                            [0, 0, 0],
                            [1, 0, -1]])
@@ -175,9 +188,9 @@ def edgeDetectionZeroCrossingSimple(img: np.ndarray) -> np.ndarray:
 
 def edgeDetectionZeroCrossingLOG(img: np.ndarray) -> np.ndarray:
     """
-    Detecting edges usint "ZeroCrossingLOG" method
+    Detecting edges using "ZeroCrossingLOG" method
     :param img: Input image
-    :return: opencv solution, my implementation
+    :return: Edge matrix
     """
 
     img = blurImage2(img, 11)
@@ -200,14 +213,16 @@ def houghCircle(img: np.ndarray, min_radius: int, max_radius: int) -> list:
     :return: A list containing the detected circles,
                 [(x,y,radius),(x,y,radius),...]
     """
+    # the thershold i used is 0.47 * 180 (180 is the number of steps)
     SIZE_THRESH_RATIO = 0.47
     edges = cv2.Canny((img*255).astype(np.uint8), 100, 200) / 255
     edges_points_arrays = np.where(edges > 0)
     edges_points = list(zip(*edges_points_arrays))
     votes = {}
-    steps = 100
+    steps = 180
     # for every point
     for y, x in edges_points:
+        # for every radius
         for r in range(min_radius, max_radius):
             # for every theta
             for step in range(steps):
@@ -240,7 +255,8 @@ def bilateral_filter_implement(in_image: np.ndarray, k_size: int, sigma_color: f
     :param sigma_space: represents the filter sigma in the coordinate.
     :return: OpenCV implementation, my implementation
     """
-    res = np.zeros_like(in_image)
+
+    res = np.zeros_like(in_image, dtype=np.float64)
     k2_size = math.floor(k_size/2)
     img = cv2.copyMakeBorder(in_image, k2_size, k2_size,
                              k2_size, k2_size, borderType=cv2.BORDER_REPLICATE)
@@ -251,13 +267,14 @@ def bilateral_filter_implement(in_image: np.ndarray, k_size: int, sigma_color: f
             neighbor_hood = img[y-k2_size: y+k2_size+1,
                                 x-k2_size: x+k2_size+1]
             diff = pivot_v - neighbor_hood
-            diff_gau = np.exp(-0.5 * np.power(diff/sigma_color, 2))
-            gaus = cv2.getGaussianKernel(2*k2_size+1, sigma_space)
+            diff_gau = np.exp(-0.5*np.power(diff/sigma_color, 2))
+            gaus = cv2.getGaussianKernel(
+                2*k2_size+1, sigma=sigma_space, ktype=cv2.CV_64F)
             gaus = gaus.dot(gaus.T)
             combo = gaus * diff_gau
             res[y - k2_size, x -
                 k2_size] = (combo*neighbor_hood).sum() / combo.sum()
 
     cv_implementation = cv2.bilateralFilter(
-        in_image, k_size, sigma_color, sigma_space, borderType=cv2.BORDER_REPLICATE)
+        in_image, k2_size, sigma_color, sigma_space, borderType=cv2.BORDER_REPLICATE)
     return cv_implementation, res
