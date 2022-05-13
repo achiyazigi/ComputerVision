@@ -12,14 +12,15 @@ def lkDemo(img_path):
 
     img_1 = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2GRAY)
     img_1 = cv2.resize(img_1, (0, 0), fx=.5, fy=0.5)
-    t = np.array([[1, 0, -.2],
-                  [0, 1, -.1],
-                  [0, 0, 1]], dtype=np.float)
-    img_2 = cv2.warpPerspective(img_1, t, img_1.shape[::-1])
-
+    t = np.array([[1, 0, -.1],
+                  [0, 1, -.2],
+                  [0, 0, 1]], dtype=np.float32)
+    img_2 = cv2.warpPerspective(
+        img_1, t, img_1.shape[::-1], flags=cv2.INTER_LINEAR)
+    plt.imshow(img_1 - img_2, cmap='gray')
     st = time.time()
-    pts, uv = opticalFlow(img_1.astype(np.float), img_2.astype(
-        np.float), step_size=20, win_size=5)
+    pts, uv = opticalFlow(img_1.astype(np.float32), img_2.astype(
+        np.float32), step_size=20, win_size=15)
     et = time.time()
 
     print("Time: {:.4f}".format(et - st))
@@ -36,24 +37,24 @@ def hierarchicalkDemo(img_path):
     """
     img_1 = cv2.imread(img_path)
     img_1 = cv2.cvtColor(img_1, cv2.COLOR_BGR2GRAY)
-    t = np.array([[1, 0, -150],
-                  [0, 1, 7],
-                  [0, 0, 1]], dtype=np.float)
+    img_1 = cv2.resize(img_1, (0, 0), fx=.5, fy=0.5)
+    t = np.array([[1, 0, 3],
+                  [0, 1, -3],
+                  [0, 0, 1]], dtype=np.float32)
     img_2 = cv2.warpPerspective(img_1, t, img_1.shape[::-1])
 
     start = time.time()
-    uvs = opticalFlowPyrLK(img_1.astype(np.float), img_2.astype(
-        np.float), 7, stepSize=20, winSize=5)
+    uvs = opticalFlowPyrLK(img_1.astype(np.float32), img_2.astype(
+        np.float32), 10, stepSize=20, winSize=5)
     end = time.time()
 
-    pts = np.indices(img_2.shape)
     pts = np.where(np.not_equal(uvs[:, :], np.zeros((2))))
     uvs = uvs[pts[0], pts[1]]
     print("Time: {:.4f}".format(end - start))
     print(np.median(uvs, 0))
     print(np.mean(uvs, 0))
     plt.imshow(img_2, cmap='gray')
-    plt.quiver(pts[1], pts[0], uvs[:, 1], uvs[:, 0], color='r')
+    plt.quiver(pts[1], pts[0], uvs[:, 0], uvs[:, 1], color='r')
 
     plt.show()
 
@@ -65,9 +66,38 @@ def compareLK(img_path):
     :param img_path: Image input
     :return:
     """
-    print("Compare LK & Hierarchical LK")
+    img_1 = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2GRAY)
+    img_1 = cv2.resize(img_1, (0, 0), fx=.5, fy=0.5)
+    t = np.array([[1, 0, 3],
+                  [0, 1, -3],
+                  [0, 0, 1]], dtype=np.float32)
+    img_2 = cv2.warpPerspective(
+        img_1, t, img_1.shape[::-1], flags=cv2.INTER_LINEAR)
+    st = time.time()
+    _, uv_naive = opticalFlow(img_1.astype(np.float32), img_2.astype(
+        np.float32), step_size=20, win_size=5)
+    et = time.time()
 
-    pass
+    print("Compare LK & Hierarchical LK")
+    print("Time of naive method: {:.4f}".format(et - st))
+    print('median of naive method:', np.median(uv_naive, 0))
+    print('mean of naive method:', np.mean(uv_naive, 0))
+
+    st = time.time()
+    uv_pyr = opticalFlowPyrLK(img_1.astype(np.float32), img_2.astype(
+        np.float32), 7, stepSize=20, winSize=5)
+    et = time.time()
+    median_pyr = np.ma.median(np.ma.masked_where(
+        uv_pyr == np.zeros((2)), uv_pyr), axis=(0, 1)).filled(0)
+    mean_pyr = np.ma.mean(np.ma.masked_where(
+        uv_pyr == np.zeros((2)), uv_pyr), axis=(0, 1)).filled(0)
+    print("Time of hierarchical method: {:.4f}".format(et - st))
+    print('median of hierarchical method:', median_pyr)
+    print('mean of hierarchical method:', mean_pyr)
+    ground_truth = np.array([3, -3])
+    diff_naive = np.power(np.median(uv_naive, 0)-ground_truth, 2).sum()/2
+    diff_pyr = np.power(median_pyr-ground_truth, 2).sum()/2
+    print('accuracy improved by:', diff_naive - diff_pyr)
 
 
 def displayOpticalFlow(img: np.ndarray, pts: np.ndarray, uvs: np.ndarray):
@@ -90,7 +120,28 @@ def imageWarpingDemo(img_path):
     """
     print("Image Warping Demo")
 
-    pass
+    def demo(im1, im2, finding_func):
+        st = time.time()
+        res = finding_func(im1.astype(np.float32), im2.astype(
+            np.float32))
+        et = time.time()
+
+        print("Compare LK & Hierarchical LK")
+        print("Time: {:.4f}".format(et - st))
+        print('Translation found:')
+        print(res)
+
+    img_1 = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2GRAY)
+    img_1 = cv2.resize(img_1, (0, 0), fx=.1, fy=0.1)
+    t = np.array([[1, 0, -11],
+                  [0, 1, 4],
+                  [0, 0, 1]], dtype=np.float32)
+    img_2 = cv2.warpPerspective(
+        img_1, t, img_1.shape[::-1], flags=cv2.INTER_LINEAR)
+
+    # demo(img_1, img_2, findTranslationLK)
+    # demo(img_1, img_2, findTranslationCorr)
+    demo(img_1, img_2, findRigidLK)
 
 
 # ---------------------------------------------------------------------------
@@ -170,10 +221,10 @@ def main():
 
     img_path = 'input/boxMan.jpg'
     # lkDemo(img_path)
-    hierarchicalkDemo(img_path)
+    # hierarchicalkDemo(img_path)
     # compareLK(img_path)
 
-    # imageWarpingDemo(img_path)
+    imageWarpingDemo(img_path)
 
     # pyrGaussianDemo('input/pyr_bit.jpg')
     # pyrLaplacianDemo('input/pyr_bit.jpg')
