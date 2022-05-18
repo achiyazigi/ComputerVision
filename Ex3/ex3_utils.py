@@ -1,3 +1,4 @@
+import copy
 import math
 from re import I
 import sys
@@ -5,9 +6,7 @@ from typing import Callable, List, Tuple
 
 import numpy as np
 import cv2
-from numpy.linalg import LinAlgError
 import matplotlib.pyplot as plt
-from alive_progress import alive_bar
 
 
 def myID() -> np.uint8:
@@ -119,7 +118,7 @@ def opticalFlowPyrLK(img1: np.ndarray, img2: np.ndarray, k: int,
 # ------------------------ Image Alignment & Warping ------------------------
 # ---------------------------------------------------------------------------
 
-def gradient_descent(im1: np.ndarray, im2: np.ndarray, grad_func: Callable[..., np.ndarray]):
+def gradient_descent(im1: np.ndarray, im2: np.ndarray, grad_func: Callable[..., np.ndarray], *args, **kwargs):
 
     FRACTION = 1
     EPOCHS = 70
@@ -140,14 +139,14 @@ def gradient_descent(im1: np.ndarray, im2: np.ndarray, grad_func: Callable[..., 
 
     # 3. calculate error
         e = np.mean(np.power(moving_img - im2, 2))
-        if epoch % 10 == 0:
-            print(f'{epoch:3}. {e}')
-        if (last_e - e) ** 2 < 0.00000000001:
+        # to print the error
+        # if epoch % 10 == 0:
+        #     print(f'{epoch:3}. {e}')
+        if (last_e - e) ** 2 < 0.00000000001 and last_e < 0.00000001:
             break
         last_e = e
     # 4. calculate error gradient
-        uvs = grad_func(moving_img, im2, int(
-            math.log2(np.min(im1.shape))), 20, 15)
+        uvs = grad_func(moving_img, im2, *args, **kwargs)
         dx, dy = FRACTION * \
             np.ma.mean(np.ma.masked_where(
                 uvs == np.zeros((2)), uvs), axis=(0, 1)).filled(0)
@@ -155,7 +154,7 @@ def gradient_descent(im1: np.ndarray, im2: np.ndarray, grad_func: Callable[..., 
     # 5. add fraction of the gradient to the movement
         grad_step_twards(dx, dy, t)
 
-    # 6. repeat from step 2 until conjesture
+    # 6. repeat from step 2 until converge
 
     # 7. return movement
     return t
@@ -167,63 +166,53 @@ def findTranslationLK(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     :param im2: image 1 after Translation.
     :return: Translation matrix by LK.
     """
-    return gradient_descent(im1, im2, opticalFlowPyrLK)
-
-
-def unit_vector(vector):
-    """ Returns the unit vector of the vector.  """
-    return vector / np.linalg.norm(vector)
-
-
-def angle_between(v1, v2):
-    """ Returns the angle in radians between vectors 'v1' and 'v2'::
-
-            >>> angle_between((1, 0, 0), (0, 1, 0))
-            1.5707963267948966
-            >>> angle_between((1, 0, 0), (1, 0, 0))
-            0.0
-            >>> angle_between((1, 0, 0), (-1, 0, 0))
-            3.141592653589793
-    """
-    v1_u = unit_vector(v1)
-    v2_u = unit_vector(v2)
-    return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
+    return gradient_descent(im1, im2, opticalFlowPyrLK, int(
+        math.log2(np.min(im1.shape))), 20, 15)
 
 
 def findRigidLK(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
+    return gradient_descent_rigid(im1, im2, opticalFlowPyrLK, int(math.log2(min(im1.shape))), 20, 15)
+
+
+def gradient_descent_rigid(im1: np.ndarray, im2: np.ndarray, grad_func: Callable[..., np.ndarray], *args, **kwargs) -> np.ndarray:
     """
     :param im1: input image 1 in grayscale format.
     :param im2: image 1 after Rigid.
     :return: Rigid matrix by LK.
     """
-    EPOCHS = 1000
+    EPOCHS = 300
     t = np.array([[1, 0, 0],
                   [0, 1, 0]], dtype=np.float32)
-    error_func = [np.mean(np.power(moving_image - im2, 2))]
+    error_func = [np.mean(np.power(im1 - im2, 2))]
     for epoch in range(EPOCHS):
         moving_image = cv2.warpAffine(im1, t, im1.shape[::-1])
 
         e = np.mean(np.power(moving_image - im2, 2))
-        if epoch % 10 == 0:
-            print(f'{epoch:3}. {e}')
-        if (error_func[-1] - e) ** 2 < 0.00000000001 and e < 0.00000000000001:
+        # here you can print the error
+        # if epoch % 10 == 0:
+        #     print(f'{epoch:3}. {e}')
+        if (error_func[-1] - e) ** 2 < 0.001 and e < 0.1:
             break
         error_func.append(e)
 
-        uvs = opticalFlowPyrLK(moving_image.astype(np.float32), im2.astype(
-            np.float32), int(math.log2(min(moving_image.shape))), 20, 5)
-        pts = np.argwhere(np.not_equal(uvs[:, :], np.zeros((2))))
-        uvs = uvs[pts[:, 0], pts[:, 1]] + pts[:, :2]
-        A = np.concatenate((pts[:, :2], np.ones(
-            (pts.shape[0], 1)), np.zeros((pts.shape[0], 3))), axis=1)
+        uvs = grad_func(moving_image.astype(np.float32), im2.astype(
+            np.float32), *args, **kwargs)
+        pts = np.argwhere((uvs[:, :, 0] != 0) | (uvs[:, :, 1] != 0))
+        uvs = uvs[pts[:, 0], pts[:, 1]]
+        pts = pts[:, 1::-1]
+        uvs += pts
+        A = np.concatenate((np.repeat(pts, 2, axis=0), np.ones(
+            (pts.shape[0]*2, 1)), np.zeros((pts.shape[0]*2, 3))), axis=1)
         A[1::2] = np.concatenate((A[1::2, 3:], A[1::2, :3]), axis=1)
-        b = np.array([uvs[::2].flatten()]).T
-        grad = np.linalg.lstsq(A, b)[0]
+        b = np.array([uvs.flatten()]).T
+        grad = np.linalg.lstsq(A, b, rcond=None)[0]
         grad = grad.reshape((2, 3))
-        t[:2, :2] @= grad[:2, :2]
-        t[:, 2] += grad[:, 2]
-    plt.plot(range(len(error_func)), error_func)
-    plt.show()
+        full_t = np.vstack([t, [0, 0, 1]])
+        full_grad = np.vstack([grad, [0, 0, 1]])
+        t = (full_t @ full_grad)[:2]
+    # to display the error function:
+    # plt.plot(range(len(error_func)), error_func)
+    # plt.show()
     return t
 
 
@@ -236,32 +225,32 @@ def opticalFlowCrossCorr(im1: np.ndarray, im2: np.ndarray, step_size, win_size):
                              half, borderType=cv2.BORDER_CONSTANT, value=0)
 
     def argcorrelation(win: np.ndarray):
-        max_corr = -1
-        top_correlation = None
-        win1 = win.copy().flatten() - win.mean()
-        norm1 = np.linalg.norm(win1, 2)
-        for y in range(half, im2.shape[0] - half - 1):
-            for x in range(half, im2.shape[1] - half - 1):
-                win2 = im2[y - half: y+half + 1, x - half: x+half+1]
+        r = cv2.matchTemplate(im2, win, cv2.TM_CCORR_NORMED)
+        # max_corr = -1
+        # top_correlation = None
+        # win1 = win.copy().flatten() - win.mean()
+        # norm1 = np.linalg.norm(win1, 2)
+        # for y in range(half, im2.shape[0] - half - 1):
+        #     for x in range(half, im2.shape[1] - half - 1):
+        #         win2 = im2[y - half: y+half + 1, x - half: x+half+1]
 
-                win2 = win2.copy().flatten() - win2.mean()
-                norms = norm1*np.linalg.norm(win2, 2)
+        #         win2 = win2.copy().flatten() - win2.mean()
+        #         norms = norm1*np.linalg.norm(win2, 2)
 
-                corr = 0 if norms == 0 else np.sum(win1 * win2)/norms
-                if corr > max_corr:
-                    max_corr = corr
-                    top_correlation = (y, x)
-        return top_correlation
+        #         corr = 0 if norms == 0 else np.sum(win1 * win2)/norms
+        #         if corr > max_corr:
+        #             max_corr = corr
+        #             top_correlation = (y, x)
+        _minVal, _maxVal, minLoc, maxLoc = cv2.minMaxLoc(r, None)
+        return np.flip(maxLoc + np.array([half, half]))
 
-    with alive_bar(int((im1.shape[0] - win_size)*(im1.shape[1] - win_size) / step_size**2)) as bar:
-        for y in range(half, im1.shape[0] - half - 1, step_size):
-            for x in range(half, im1.shape[1] - half - 1, step_size):
-                window = im1[y - half: y+half + 1, x - half: x+half+1]
-                top_correlation = argcorrelation(window)
-                uvs[y-half, x -
-                    half] = np.flip(top_correlation - np.array([y, x]))
-                bar()
-    return uvs
+    for y in range(half, im1.shape[0] - half - 1, step_size):
+        for x in range(half, im1.shape[1] - half - 1, step_size):
+            window = im1[y - half: y+half + 1, x - half: x+half+1]
+            top_correlation = argcorrelation(window)
+            uvs[y-half, x -
+                half] = np.flip(top_correlation - np.array([y, x]))
+    return uvs.astype(np.float32)
 
 
 def findTranslationCorr(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
@@ -284,7 +273,7 @@ def findRigidCorr(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     :param im2: image 1 after Rigid.
     :return: Rigid matrix by correlation.
     """
-    pass
+    return gradient_descent_rigid(im1, im2, opticalFlowCrossCorr, 15, 15)
 
 
 def warpImages(im1: np.ndarray, im2: np.ndarray, T: np.ndarray) -> np.ndarray:
@@ -311,7 +300,23 @@ def gaussianPyr(img: np.ndarray, levels: int = 4) -> List[np.ndarray]:
     :param levels: Pyramid depth
     :return: Gaussian pyramid (list of images)
     """
-    pass
+    if levels < 1:
+        return []
+    res = [img]
+    for i in range(levels-1):
+        ker = cv2.getGaussianKernel(5, -1)
+        res.append(cv2.filter2D(
+            res[-1], ddepth=-1, kernel=ker)[::2, ::2])
+    return res
+
+
+def expand_img(img, factor) -> np.ndarray:
+    expand = np.repeat(np.repeat(img, 2, axis=0), 2, axis=1)
+    expand[::2, 1::factor] = 0
+    expand[1::2] = 0
+    ker = cv2.getGaussianKernel(5, -1)*4
+    expand = cv2.sepFilter2D(expand, -1, ker, ker)/4
+    return expand
 
 
 def laplaceianReduce(img: np.ndarray, levels: int = 4) -> List[np.ndarray]:
@@ -321,7 +326,20 @@ def laplaceianReduce(img: np.ndarray, levels: int = 4) -> List[np.ndarray]:
     :param levels: Pyramid depth
     :return: Laplacian Pyramid (list of images)
     """
-    pass
+    pyr = gaussianPyr(img, levels)
+    if levels < 2:
+        return pyr
+    res = [pyr[-1]]
+    for i in range(levels-2, -1, -1):
+        orig = pyr[i+1]
+        expand = expand_img(orig, 2)
+        if expand.shape[0] > pyr[i].shape[0]:
+            expand = expand[:-1]
+        if expand.shape[1] > pyr[i].shape[1]:
+            expand = expand[:, :-1]
+        res.insert(0, pyr[i] - expand)
+
+    return res
 
 
 def laplaceianExpand(lap_pyr: List[np.ndarray]) -> np.ndarray:
@@ -330,7 +348,20 @@ def laplaceianExpand(lap_pyr: List[np.ndarray]) -> np.ndarray:
     :param lap_pyr: Laplacian Pyramid
     :return: Original image
     """
-    pass
+    if len(lap_pyr) == 0:
+        return np.ndarray()
+    if len(lap_pyr) == 1:
+        return lap_pyr[0]
+    res = lap_pyr[-1]
+    for i in range(len(lap_pyr)-2, -1, -1):
+        img = lap_pyr[i]
+        res = expand_img(res, 2)
+        if res.shape[0] > img.shape[0]:
+            res = res[:-1]
+        if res.shape[1] > img.shape[1]:
+            res = res[:, :-1]
+        res += img
+    return res
 
 
 def pyrBlend(img_1: np.ndarray, img_2: np.ndarray,
@@ -343,4 +374,8 @@ def pyrBlend(img_1: np.ndarray, img_2: np.ndarray,
     :param levels: Pyramid depth
     :return: (Naive blend, Blended Image)
     """
-    pass
+    l1 = np.array(laplaceianReduce(img_1, levels))
+    l2 = np.array(laplaceianReduce(img_2, levels))
+    gm = np.array(gaussianPyr(mask, levels))
+    l3 = gm*l1+(1-gm)*l2
+    return img_1*mask + (1-mask)*img_2, laplaceianExpand(l3)

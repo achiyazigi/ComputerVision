@@ -120,28 +120,71 @@ def imageWarpingDemo(img_path):
     """
     print("Image Warping Demo")
 
-    def demo(im1, im2, finding_func):
+    def demo(im1, im2, t, finding_func):
         st = time.time()
         res = finding_func(im1.astype(np.float32), im2.astype(
             np.float32))
         et = time.time()
 
-        print("Compare LK & Hierarchical LK")
         print("Time: {:.4f}".format(et - st))
         print('Translation found:')
         print(res)
+        print('SE:')
+        print(np.power(t-res, 2).mean())
 
     img_1 = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2GRAY)
     img_1 = cv2.resize(img_1, (0, 0), fx=.1, fy=0.1)
-    t = np.array([[1, 0, -11],
-                  [0, 1, 4],
-                  [0, 0, 1]], dtype=np.float32)
-    img_2 = cv2.warpPerspective(
-        img_1, t, img_1.shape[::-1], flags=cv2.INTER_LINEAR)
 
-    # demo(img_1, img_2, findTranslationLK)
-    # demo(img_1, img_2, findTranslationCorr)
-    demo(img_1, img_2, findRigidLK)
+    t = np.array([[1, 0, -5],
+                  [0, 1, 8],
+                  [0, 0, 1]],
+                 dtype=np.float32)
+
+    img_2 = cv2.warpPerspective(
+        img_1, t, img_1.shape[::-1])
+    theta = np.deg2rad(-20)
+    cos_t = np.cos(theta)
+    sin_t = np.sin(theta)
+
+    t2 = np.array([[cos_t, sin_t, 12],
+                  [-sin_t, cos_t, -12.5]],
+                  dtype=np.float32)
+
+    img_3 = cv2.warpAffine(
+        img_1, t2, img_1.shape[::-1])
+    TGREEN = '\033[32;1m'  # Green Text
+    TYELLOW = '\033[33m'  # Yellow Text
+    BGYELLOW = '\033[0;30;47m'  # Yellow bg Text
+    TBLUE = '\033[34m'  # Blue Text
+    ENDC = '\033[m'  # reset to the defaults
+
+    print(TGREEN, "Compare LK & Hierarchical LK (Movement)", ENDC)
+    print(TBLUE, "Original transformation:")
+    print(t, ENDC)
+
+    print(TYELLOW, "-LK Results:", ENDC)
+    print(BGYELLOW)
+    demo(img_1, img_2, t, findTranslationLK)
+    print(ENDC)
+
+    print(TYELLOW, "-Correlation Results:", ENDC)
+    print(BGYELLOW)
+    demo(img_1, img_2, t, findTranslationCorr)
+    print(ENDC)
+
+    print(TGREEN, "Compare LK & Hierarchical LK (Rigid)", ENDC)
+    print(TBLUE, "Original transformation:")
+    print(t2, ENDC)
+
+    print(TYELLOW, "-LK Results:", ENDC)
+    print(BGYELLOW)
+    demo(img_1, img_3, t2, findRigidLK)
+    print(ENDC)
+
+    print(TYELLOW, "-Correlation Results:", ENDC)
+    print(BGYELLOW)
+    demo(img_1, img_3, t2, findRigidCorr)
+    print(ENDC)
 
 
 # ---------------------------------------------------------------------------
@@ -220,15 +263,15 @@ def main():
     print("ID:", myID())
 
     img_path = 'input/boxMan.jpg'
-    # lkDemo(img_path)
-    # hierarchicalkDemo(img_path)
-    # compareLK(img_path)
+    lkDemo(img_path)
+    hierarchicalkDemo(img_path)
+    compareLK(img_path)
 
     imageWarpingDemo(img_path)
 
-    # pyrGaussianDemo('input/pyr_bit.jpg')
-    # pyrLaplacianDemo('input/pyr_bit.jpg')
-    # blendDemo()
+    pyrGaussianDemo('input/pyr_bit.jpg')
+    pyrLaplacianDemo('input/pyr_bit.jpg')
+    blendDemo()
 
 
 if __name__ == '__main__':
