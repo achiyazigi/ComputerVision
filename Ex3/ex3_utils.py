@@ -208,7 +208,7 @@ def gradient_descent_rigid(im1: np.ndarray, im2: np.ndarray, grad_func: Callable
         full_t = np.vstack([t, [0, 0, 1]])
         full_grad = np.vstack([grad, [0, 0, 1]])
         t = (full_t @ full_grad)[:2]
-    # to display the error function:
+    # # to display the error function:
     # plt.plot(range(len(error_func)), error_func)
     # plt.show()
     return t
