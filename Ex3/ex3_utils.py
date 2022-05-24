@@ -1,7 +1,5 @@
-import copy
 import math
 from re import I
-import sys
 from typing import Callable, List, Tuple
 
 import numpy as np
@@ -276,17 +274,67 @@ def findRigidCorr(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     return gradient_descent_rigid(im1, im2, opticalFlowCrossCorr, 15, 15)
 
 
+def interpolate2d(indices: np.ndarray, pallete: np.ndarray) -> np.int32:
+    cc = np.ceil(indices).astype(np.int32)
+    ff = np.floor(indices).astype(np.int32)
+    if np.any(cc >= np.array(pallete.shape[:2])):
+        return pallete[ff[0], ff[1]]
+
+    def inter_color(a: np.ndarray, b: np.ndarray, c: np.ndarray):
+        """
+        interpolate only 1 color
+        """
+        mult = a @ b @ c
+        return (mult//np.prod(cc-ff))[0, 0]
+
+    a = np.array([[cc[0] - indices[0], indices[0] - ff[0]]])
+    b = pallete[ff[0]:cc[0]+1, ff[1]:cc[1]+1]
+    c = np.array([[cc[1] - indices[1]],
+                  [indices[1] - ff[1]]])
+    if pallete.ndim < 3:
+        return inter_color(a, b, c)
+    res = []
+    for i in range(b.shape[-1]):
+        res.append(inter_color(a, b[:, :, i], c))
+    return res
+
+
 def warpImages(im1: np.ndarray, im2: np.ndarray, T: np.ndarray) -> np.ndarray:
     """
-    :param im1: input image 1 in grayscale format.
-    :param im2: input image 2 in grayscale format.
+    :param im1: input image 1
+    :param im2: input image 2
     :param T: is a 3x3 matrix such that each pixel in image 2
     is mapped under homogenous coordinates to image 1 (p2=Tp1).
     :return: warp image 2 according to T and display both image1
     and the wrapped version of the image2 in the same figure.
     """
-    pass
+    im2_size_2d = np.prod(im2.shape[:2])
 
+    res = np.zeros_like(im1)
+    indices = np.flip(np.indices(im2.shape[:2]).reshape(
+        (2, im2_size_2d)), axis=0)
+    hom_indices = np.vstack((indices, np.ones(im2_size_2d)))
+    mapped_indices = (T @ hom_indices)[:2]
+
+    mapped_indices = np.flip(mapped_indices, axis=0)
+    z = np.zeros(2)
+
+    for y in range(res.shape[0]):
+        for x in range(res.shape[1]):
+            if x + y*res.shape[1] < mapped_indices.shape[1]:
+                i = mapped_indices[:, x + y*res.shape[1]].flatten()
+                if np.all((z < i) & (i < res.shape[:2])):
+                    res[y, x] = interpolate2d(i, im2)
+
+    f, ax = plt.subplots(1, 3)
+    ax[0].imshow(im1)
+    ax[0].set_title('original')
+    ax[1].imshow(res)
+    ax[1].set_title('restored')
+    ax[2].imshow(im2)
+    ax[2].set_title('translated')
+    plt.show()
+    return res
 
 # ---------------------------------------------------------------------------
 # --------------------- Gaussian and Laplacian Pyramids ---------------------

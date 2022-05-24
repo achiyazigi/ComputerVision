@@ -150,8 +150,20 @@ def imageWarpingDemo(img_path):
                   [-sin_t, cos_t, -12.5]],
                   dtype=np.float32)
 
+    t3 = np.vstack((t2, np.array([0, 0, 1])))
+    move_t3 = np.array([[1, 0, 15],
+                        [0, 1, -15],
+                        [0, 0, 1]])
+    t3 = t3 @ move_t3
     img_3 = cv2.warpAffine(
         img_1, t2, img_1.shape[::-1])
+
+    img_4 = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
+    img_4 = cv2.resize(img_4, (0, 0), fx=0.3, fy=0.3)
+    img_4 = cv2.copyMakeBorder(
+        img_4, 30, 30, 30, 30, borderType=cv2.BORDER_CONSTANT, value=[0, 0, 0])
+    img_5 = cv2.warpPerspective(
+        img_4, t3, img_4.shape[1::-1])
     TGREEN = '\033[32;1m'  # Green Text
     TYELLOW = '\033[33m'  # Yellow Text
     BGYELLOW = '\033[0;30;47m'  # Yellow bg Text
@@ -185,6 +197,9 @@ def imageWarpingDemo(img_path):
     print(BGYELLOW)
     demo(img_1, img_3, t2, findRigidCorr)
     print(ENDC)
+
+    images_color = warpImages(img_4, img_5, t3)
+    images_gray = warpImages(img_1, img_3, t2)
 
 
 # ---------------------------------------------------------------------------
