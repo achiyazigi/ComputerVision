@@ -13,7 +13,7 @@ def displayDepthImage(l_img, r_img, disparity_range=(0, 5), method=disparitySSD)
 
 def main():
     # Print your ID number
-    print("ID:", 100)
+    print("ID:", 316071349)
 
     # Read images
     i = 0
@@ -22,6 +22,10 @@ def main():
 
     # Display depth SSD
     displayDepthImage(L, R, (0, 4), method=disparitySSD)
+
+    i += 1
+    L = cv2.imread(os.path.join('input', 'pair%d-L.png' % i), 0) / 255.0
+    R = cv2.imread(os.path.join('input', 'pair%d-R.png' % i), 0) / 255.0
 
     # Display depth NC
     displayDepthImage(L, R, (0, 4), method=disparityNC)
@@ -38,7 +42,8 @@ def main():
 
     print(h, error)
 
-    dst = cv2.imread(os.path.join('input', 'billBoard.jpg'))[:, :, [2, 1, 0]] / 255.0
+    dst = cv2.imread(os.path.join('input', 'billBoard.jpg'))[
+        :, :, [2, 1, 0]] / 255.0
     src = cv2.imread(os.path.join('input', 'car.jpg'))[:, :, [2, 1, 0]] / 255.0
 
     warpImag(src, dst)
