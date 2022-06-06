@@ -1,10 +1,25 @@
-from typing import Tuple
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
+from scipy.ndimage import uniform_filter
 
 
-def disparitySSD(img_l: np.ndarray, img_r: np.ndarray, disp_range: Tuple[int, int], k_size: int) -> np.ndarray:
+def _disparity(img_l: np.ndarray, img_r: np.ndarray, disp_range, value_method, collect_method) -> np.ndarray:
+    min_depth, max_depth = disp_range
+    disparity_resolt = np.zeros(
+        (*img_l.shape, max_depth-min_depth))  # ndim = 3
+    # for each depth
+    for offset in range(min_depth, max_depth):
+        # move image
+        moved_l = np.roll(img_l, -offset)
+        # compute value method
+        disparity_resolt[:, :, offset -
+                         min_depth] = value_method(moved_l, img_r)
+    # collect and return
+    return collect_method(disparity_resolt, axis=2)+min_depth
+
+
+def disparitySSD(img_l: np.ndarray, img_r: np.ndarray, disp_range, k_size: int) -> np.ndarray:
     """
     img_l: Left image
     img_r: Right image
@@ -13,36 +28,10 @@ def disparitySSD(img_l: np.ndarray, img_r: np.ndarray, disp_range: Tuple[int, in
 
     return: Disparity map, disp_map.shape = Left.shape
     """
-    padded_l = cv2.copyMakeBorder(
-        img_l, k_size, k_size, k_size, k_size, borderType=cv2.BORDER_CONSTANT, value=0)
-    padded_r = cv2.copyMakeBorder(
-        img_r, k_size, k_size, k_size, k_size, borderType=cv2.BORDER_CONSTANT, value=0)
-
-    def SSD(I1, I2):
-        return np.sum(np.power(I1-I2, 2))
-
-    def correspondence_pixel(y, x):
-        y += k_size
-        x += k_size
-        win_l = padded_l[y-k_size: y+k_size+1, x-k_size: x+k_size+1]
-        min_index = k_size
-        min_value = np.inf
-        for i in range(k_size, img_r.shape[1] - k_size - 1):
-            win_r = padded_r[y-k_size: y+k_size+1, i-k_size: i+k_size+1]
-            ssd = SSD(win_l, win_r)
-            if ssd < min_value:
-                min_value = ssd
-                min_index = i
-        return [y-k_size, min_index-k_size]
-
-    slide = np.array([
-        [correspondence_pixel(y, x) for x in range(img_l.shape[1])]
-        for y in range(img_l.shape[0])
-    ])
-    indices = np.dstack(np.indices(img_l.shape))
-    disparity = np.abs(indices - slide)
-    res = disparity[:, :, 1]
-    return res.reshape(img_l.shape)
+    def value_method(l, r):
+        # Simple sum of squered difference (SSD)
+        return uniform_filter(np.square(l - r), k_size)
+    return _disparity(img_l, img_r, disp_range, value_method, np.argmin)
 
 
 def disparityNC(img_l: np.ndarray, img_r: np.ndarray, disp_range: int, k_size: int) -> np.ndarray:
@@ -54,42 +43,24 @@ def disparityNC(img_l: np.ndarray, img_r: np.ndarray, disp_range: int, k_size: i
 
     return: Disparity map, disp_map.shape = Left.shape
     """
-    padded_l = cv2.copyMakeBorder(
-        img_l, k_size, k_size, k_size, k_size, borderType=cv2.BORDER_CONSTANT, value=0)
-    padded_r = cv2.copyMakeBorder(
-        img_r, k_size, k_size, k_size, k_size, borderType=cv2.BORDER_CONSTANT, value=0)
+    norm_l = img_l - uniform_filter(img_l, k_size)
+    norm_r = img_r - uniform_filter(img_r, k_size)
 
-    def cross_corr(I1, I2):
-        return np.sum(I1 * I2)/np.sqrt(np.sum(np.power(I1, 2))*np.sum(np.power(I2, 2)))
-
-    def correspondence_pixel(y, x):
-        y += k_size
-        x += k_size
-        win_l = padded_l[y-k_size: y+k_size+1, x-k_size: x+k_size+1]
-        max_index = k_size
-        max_value = -1
-        for i in range(k_size, img_r.shape[1] - k_size - 1):
-            win_r = padded_r[y-k_size: y+k_size+1, i-k_size: i+k_size+1]
-            cross = cross_corr(win_l, win_r)
-            if cross > max_value:
-                max_value = cross
-                max_index = i
-        return [y-k_size, max_index-k_size]
-    slide = np.array([
-        [correspondence_pixel(y, x) for x in range(img_l.shape[1])]
-        for y in range(img_l.shape[0])
-    ])
-    indices = np.dstack(np.indices(img_l.shape))
-    disparity = np.abs(indices - slide)
-    res = disparity[:, :, 1]
-    return res.reshape(img_l.shape)
+    def value_method(l, r):
+        # Normalized Cross Correlation
+        cross_top = uniform_filter(l * r, k_size)
+        sigma_l = uniform_filter(np.square(l), k_size)
+        sigma_r = uniform_filter(np.square(r), k_size)
+        cross_bottom = np.sqrt(sigma_l * sigma_r)
+        return cross_top/cross_bottom
+    return _disparity(norm_l, norm_r, disp_range, value_method, np.argmax)
 
 
 def convert_to_hom(src_pnt) -> np.ndarray:
     return np.vstack((src_pnt.T, np.ones(src_pnt.shape[0])))
 
 
-def computeHomography(src_pnt: np.ndarray, dst_pnt: np.ndarray) -> Tuple[np.ndarray, float]:
+def computeHomography(src_pnt: np.ndarray, dst_pnt: np.ndarray):
     """
     Finds the homography matrix, M, that transforms points from src_pnt to dst_pnt.
     returns the homography and the error between the transformed points to their
@@ -136,7 +107,20 @@ def warpImag(src_img: np.ndarray, dst_img: np.ndarray) -> None:
     """
 
     dst_p = []
+    src_p = []
     fig1 = plt.figure()
+
+    def onclick_2(event):
+        x = event.xdata
+        y = event.ydata
+        print("Loc: {:.0f},{:.0f}".format(x, y))
+
+        plt.plot(x, y, '*r')
+        src_p.append([x, y])
+
+        if len(src_p) == 4:
+            plt.close()
+        plt.show()
 
     def onclick_1(event):
         x = event.xdata
@@ -155,9 +139,19 @@ def warpImag(src_img: np.ndarray, dst_img: np.ndarray) -> None:
     plt.imshow(dst_img)
     plt.show()
     dst_p = np.array(dst_p)
+    cid = fig1.canvas.mpl_disconnect(cid)
+    fig1 = plt.figure()
+    cid = fig1.canvas.mpl_connect('button_press_event', onclick_2)
+    plt.imshow(src_img)
+    plt.show()
+    src_p = np.array(src_p)
 
     ##### Your Code Here ######
-
-    # out = dst_img * mask + src_out * (1 - mask)
-    # plt.imshow(out)
-    # plt.show()
+    h, w = src_img.shape[:2]
+    hom, err = computeHomography(src_p, dst_p)
+    src_out = cv2.warpPerspective(
+        src_img, hom, dst_img.shape[1::-1])
+    mask = src_out == 0
+    out = dst_img * mask + src_out * (1 - mask)
+    plt.imshow(out)
+    plt.show()
